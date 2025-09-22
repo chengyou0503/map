@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>旅程費用估算</title>
     <style>
-        /* UI/UX v10.2: Autocomplete z-index 修正 */
+        /* CSS 部分無需變更 */
         :root {
             --primary-color: #000; --primary-hover-color: #333; --border-color: #eee;
             --background-color: #f6f6f6; --text-color: #000; --text-secondary-color: #555;
@@ -62,13 +62,7 @@
         .loader { width: 24px; height: 24px; border: 3px solid #f3f3f3; border-top: 3px solid var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite; margin: 20px auto; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .error-message { text-align: center; color: var(--text-color); padding: 20px 0; }
-        
-        /* 【關鍵修正】強制提升 Autocomplete 建議列表的圖層順序 */
-        .pac-container {
-            z-index: 9999 !important;
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
+        .pac-container { z-index: 9999 !important; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
     </style>
 </head>
 <body>
@@ -134,13 +128,33 @@
         const resultsPanel = document.querySelector('.results-panel');
         const errorMessage = document.querySelector('.error-message');
 
-        const APPS_SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycbyNxkyX4jNBo39cdyu06on5aRZS5_Ohnr_4TzXL0Q7W69_gx--RBymOBlWvr-VWbxoU/exec"; // 【重要】請務必替換成您自己的 API 網址
+        const APPS_SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycby6x4c3oLoTYk7EzLxAM9A535JcufdwKe3M9kEIOgp5q_pcA5_m7jU1NQOdwg_g2kUj/exec"; // 【重要】請務必替換成您自己的 API 網址
 
         submitBtn.addEventListener('click', handleFareRequest);
         newRideBtn.addEventListener('click', showInputView);
         tryAgainBtn.addEventListener('click', showInputView);
         
-        async function handleFareRequest() {
+        // 【關鍵修改】使用 JSONP 請求函式來繞過 CORS
+        function jsonpRequest(url, callback) {
+            const callbackName = 'jsonp_callback_' + Math.round(100000 * Math.random());
+            window[callbackName] = function(data) {
+                delete window[callbackName];
+                document.body.removeChild(script);
+                callback(data);
+            };
+
+            const script = document.createElement('script');
+            script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + callbackName;
+            script.onerror = () => {
+                // 處理網路錯誤或 Apps Script 部署權限問題
+                delete window[callbackName];
+                document.body.removeChild(script);
+                callback({ success: false, error: '無法連接到後端 API，請檢查部署設定與網址。' });
+            };
+            document.body.appendChild(script);
+        }
+
+        function handleFareRequest() {
             if (APPS_SCRIPT_API_URL === "YOUR_APPS_SCRIPT_API_URL") {
                 alert("錯誤：請先在 index.html 檔案中設定您的 APPS_SCRIPT_API_URL！"); return;
             }
@@ -152,21 +166,11 @@
             
             const originString = `${currentUserLocation.lat},${currentUserLocation.lng}`;
             
-            try {
-                const response = await fetch(APPS_SCRIPT_API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({
-                        origin: originString,
-                        destination: destination
-                    })
-                });
-                if (!response.ok) { throw new Error(`伺服器錯誤: ${response.status}`); }
-                const result = await response.json();
-                handleResponse(result);
-            } catch (err) {
-                handleResponse({ success: false, error: err.message });
-            }
+            const apiUrl = new URL(APPS_SCRIPT_API_URL);
+            apiUrl.searchParams.append('origin', originString);
+            apiUrl.searchParams.append('destination', destination);
+            
+            jsonpRequest(apiUrl.href, handleResponse);
         }
 
         function handleResponse(response) {
