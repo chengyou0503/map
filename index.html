@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>旅程費用估算</title>
+    <style>
+        /* UI/UX v10: 自動夜間加成 */
+        :root {
+            --primary-color: #000; --primary-hover-color: #333; --border-color: #eee;
+            --background-color: #f6f6f6; --text-color: #000; --text-secondary-color: #555;
+            --shadow-color: rgba(0, 0, 0, 0.15); --surcharge-color: #e87c00;
+        }
+        html, body {
+            height: 100%; margin: 0; padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            overflow: hidden;
+        }
+        .app-layout { position: relative; width: 100%; height: 100%; }
+        .map-container { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 1; }
+        .control-panel {
+            position: absolute; bottom: 0; left: 0; right: 0; z-index: 10;
+            background: #ffffff;
+            border-top-left-radius: 20px; border-top-right-radius: 20px;
+            box-shadow: 0 -5px 25px var(--shadow-color);
+            padding: 20px; box-sizing: border-box;
+            max-height: 90vh; display: flex; flex-direction: column;
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @media (min-width: 600px) {
+            .control-panel {
+                left: 50%; bottom: 20px;
+                transform: translateX(-50%);
+                width: 400px; border-radius: 20px;
+            }
+        }
+        .panel-content { overflow-y: auto; }
+        .input-group {
+            display: flex; align-items: center; background-color: var(--background-color);
+            border-radius: 10px; padding: 12px; margin-bottom: 20px; /* 增加下方間距 */
+        }
+        .input-group svg { flex-shrink: 0; margin-right: 10px; }
+        #destination-input {
+            width: 100%; font-size: 16px; border: none; background: transparent;
+        }
+        #destination-input:focus { outline: none; }
+        #submit-btn, #new-ride-btn, #try-again-btn {
+            width: 100%; padding: 16px; background-color: var(--primary-color); color: white;
+            border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        #submit-btn:hover, #new-ride-btn:hover, #try-again-btn:hover { background-color: var(--primary-hover-color); }
+        #submit-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+        .results-panel { padding-top: 10px; }
+        .result-item { font-size: 16px; display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border-color); }
+        .result-item:last-child { border-bottom: none; }
+        .result-item.surcharge-info span { color: var(--surcharge-color); font-weight: 500; } /* 夜間加成提示樣式 */
+        .result-item span { font-weight: 600; color: var(--text-color); }
+        .result-fare { font-size: 28px; font-weight: 700; align-items: center; }
+        .result-fare span { color: var(--primary-color); }
+        #results-view, #error-view, #loading-view { display: none; }
+        .loader { width: 24px; height: 24px; border: 3px solid #f3f3f3; border-top: 3px solid var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .error-message { text-align: center; color: var(--text-color); padding: 20px 0; }
+        .pac-container { border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+    <div class="app-layout">
+        <div id="map" class="map-container"></div>
+        <div class="control-panel">
+            <!-- 狀態 1: 輸入畫面 -->
+            <div id="input-view">
+                <div class="input-group">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 18C14.4183 18 18 14.4183 18 10C18 5.58172 14.4183 2 10 2C5.58172 2 2 5.58172 2 10C2 14.4183 5.58172 18 10 18Z" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 21L15 15" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <input type="text" id="destination-input" placeholder="想去哪裡？">
+                </div>
+                <button type="button" id="submit-btn">確認目的地</button>
+            </div>
+            <!-- 狀態 2: 結果畫面 -->
+            <div id="results-view">
+                <div class="results-panel"></div>
+                <button type="button" id="new-ride-btn" style="margin-top: 20px;">重新查詢</button>
+            </div>
+            <!-- 狀態 3: 載入中畫面 -->
+            <div id="loading-view"><div class="loader"></div></div>
+            <!-- 狀態 4: 錯誤畫面 -->
+            <div id="error-view">
+                <div class="error-message"></div>
+                <button type="button" id="try-again-btn">再試一次</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let map, routePolyline, startMarker, endMarker, AdvancedMarkerElement;
+        let currentUserLocation = null;
+
+        async function initMap() {
+            const { Map } = await google.maps.importLibrary("maps");
+            const { Autocomplete } = await google.maps.importLibrary("places");
+            AdvancedMarkerElement = (await google.maps.importLibrary("marker")).AdvancedMarkerElement;
+            const defaultCenter = {lat: 25.0478, lng: 121.5319};
+            map = new Map(document.getElementById('map'), {
+                center: defaultCenter, zoom: 14, disableDefaultUI: true,
+                zoomControl: true, mapTypeControl: false, streetViewControl: false,
+                mapId: "UBER_PRO_MAP_STYLE"
+            });
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (p) => {
+                        currentUserLocation = { lat: p.coords.latitude, lng: p.coords.longitude };
+                        map.setCenter(currentUserLocation);
+                        map.setZoom(16);
+                    },
+                    () => console.warn("無法取得使用者位置，將使用預設地點。")
+                );
+            }
+            const autocomplete = new Autocomplete(destinationInput, { fields: ["formatted_address", "geometry", "name"] });
+        }
+    </script>
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAwNCK7580qzhz4ySuK1CQ1T66RaYKpBLg&libraries=places,geometry&callback=initMap"></script>
+    <script>
+        const destinationInput = document.getElementById('destination-input');
+        const submitBtn = document.getElementById('submit-btn');
+        const newRideBtn = document.getElementById('new-ride-btn');
+        const tryAgainBtn = document.getElementById('try-again-btn');
+        const inputView = document.getElementById('input-view');
+        const resultsView = document.getElementById('results-view');
+        const loadingView = document.getElementById('loading-view');
+        const errorView = document.getElementById('error-view');
+        const resultsPanel = document.querySelector('.results-panel');
+        const errorMessage = document.querySelector('.error-message');
+
+        const APPS_SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycbywoLwBv6DRhvbL1OfPJbPwMblAZh7IWcUOGEedKc4U77CIZisDKOUBdH4GE9DzTP4B/exec"; // 【重要】請務必替換成您自己的 API 網址
+
+        submitBtn.addEventListener('click', handleFareRequest);
+        newRideBtn.addEventListener('click', showInputView);
+        tryAgainBtn.addEventListener('click', showInputView);
+        
+        async function handleFareRequest() {
+            if (APPS_SCRIPT_API_URL === "YOUR_APPS_SCRIPT_API_URL") {
+                alert("錯誤：請先在 index.html 檔案中設定您的 APPS_SCRIPT_API_URL！"); return;
+            }
+            const destination = destinationInput.value.trim();
+            if (!destination) { alert("請輸入目的地。"); return; }
+            if (!currentUserLocation) { alert("無法取得您目前的位置。請允許位置存取權限後再試一次。"); return; }
+            
+            showLoadingView();
+            
+            const originString = `${currentUserLocation.lat},${currentUserLocation.lng}`;
+            
+            const apiUrl = new URL(APPS_SCRIPT_API_URL);
+            apiUrl.searchParams.append('origin', originString);
+            apiUrl.searchParams.append('destination', destination);
+            // 【關鍵修改】不再傳送 isNightSurcharge 參數
+            
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) { throw new Error(`伺服器錯誤: ${response.status}`); }
+                const result = await response.json();
+                handleResponse(result);
+            } catch (err) {
+                handleResponse({ success: false, error: err.message });
+            }
+        }
+
+        function handleResponse(response) {
+            if (response.success) {
+                showResultsView(response.data);
+            } else {
+                showErrorView(response.error);
+            }
+        }
+
+        function showInputView() {
+            if (routePolyline) routePolyline.setMap(null);
+            if (startMarker) startMarker.map = null;
+            if (endMarker) endMarker.map = null;
+            destinationInput.value = '';
+            if(currentUserLocation) map.panTo(currentUserLocation); map.setZoom(16);
+            resultsView.style.display = 'none';
+            loadingView.style.display = 'none';
+            errorView.style.display = 'none';
+            inputView.style.display = 'block';
+        }
+
+        function showLoadingView() {
+            inputView.style.display = 'none';
+            resultsView.style.display = 'none';
+            errorView.style.display = 'none';
+            loadingView.style.display = 'block';
+        }
+
+        function showResultsView(data) {
+            if (routePolyline) routePolyline.setMap(null);
+            if (startMarker) startMarker.map = null;
+            if (endMarker) endMarker.map = null;
+
+            const decodedPath = google.maps.geometry.encoding.decodePath(data.polyline);
+            if (decodedPath.length === 0) { showErrorView("無法解析路線資料。"); return; }
+
+            routePolyline = new google.maps.Polyline({ path: decodedPath, strokeColor: '#000000', strokeOpacity: 0.8, strokeWeight: 6 });
+            routePolyline.setMap(map);
+
+            startMarker = new AdvancedMarkerElement({ position: decodedPath[0], map: map });
+            endMarker = new AdvancedMarkerElement({ position: decodedPath[decodedPath.length - 1], map: map });
+
+            const bounds = new google.maps.LatLngBounds();
+            decodedPath.forEach(point => bounds.extend(point));
+            map.fitBounds(bounds, { top: 50, bottom: 400, left: 50, right: 50 });
+
+            // 【關鍵修改】動態產生結果 HTML，並檢查是否要顯示夜間加成提示
+            let resultsHTML = `
+                <div class="result-item result-fare">預估車資<span>TWD ${data.fare}</span></div>
+                <div class="result-item">預估時間<span>${data.duration}</span></div>
+                <div class="result-item">預估距離<span>${data.distance}</span></div>
+            `;
+            if (data.isNightSurchargeApplied) {
+                resultsHTML += `<div class="result-item surcharge-info"><span>夜間加成 (23:00-06:00)</span><span>已包含</span></div>`;
+            }
+            resultsPanel.innerHTML = resultsHTML;
+            
+            inputView.style.display = 'none';
+            loadingView.style.display = 'none';
+            errorView.style.display = 'none';
+            resultsView.style.display = 'block';
+        }
+
+        function showErrorView(message) {
+            errorMessage.textContent = message || "發生未知錯誤。";
+            inputView.style.display = 'none';
+            resultsView.style.display = 'none';
+            loadingView.style.display = 'none';
+            errorView.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
