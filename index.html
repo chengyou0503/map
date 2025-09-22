@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>旅程費用估算</title>
     <style>
-        /* UI/UX v10: 自動夜間加成 */
+        /* UI/UX v10 Final: 自動夜間加成 & POST 請求 */
         :root {
             --primary-color: #000; --primary-hover-color: #333; --border-color: #eee;
             --background-color: #f6f6f6; --text-color: #000; --text-secondary-color: #555;
@@ -37,7 +37,7 @@
         .panel-content { overflow-y: auto; }
         .input-group {
             display: flex; align-items: center; background-color: var(--background-color);
-            border-radius: 10px; padding: 12px; margin-bottom: 20px; /* 增加下方間距 */
+            border-radius: 10px; padding: 12px; margin-bottom: 20px;
         }
         .input-group svg { flex-shrink: 0; margin-right: 10px; }
         #destination-input {
@@ -54,7 +54,7 @@
         .results-panel { padding-top: 10px; }
         .result-item { font-size: 16px; display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border-color); }
         .result-item:last-child { border-bottom: none; }
-        .result-item.surcharge-info span { color: var(--surcharge-color); font-weight: 500; } /* 夜間加成提示樣式 */
+        .result-item.surcharge-info span { color: var(--surcharge-color); font-weight: 500; }
         .result-item span { font-weight: 600; color: var(--text-color); }
         .result-fare { font-size: 28px; font-weight: 700; align-items: center; }
         .result-fare span { color: var(--primary-color); }
@@ -69,7 +69,6 @@
     <div class="app-layout">
         <div id="map" class="map-container"></div>
         <div class="control-panel">
-            <!-- 狀態 1: 輸入畫面 -->
             <div id="input-view">
                 <div class="input-group">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 18C14.4183 18 18 14.4183 18 10C18 5.58172 14.4183 2 10 2C5.58172 2 2 5.58172 2 10C2 14.4183 5.58172 18 10 18Z" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 21L15 15" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -77,14 +76,11 @@
                 </div>
                 <button type="button" id="submit-btn">確認目的地</button>
             </div>
-            <!-- 狀態 2: 結果畫面 -->
             <div id="results-view">
                 <div class="results-panel"></div>
                 <button type="button" id="new-ride-btn" style="margin-top: 20px;">重新查詢</button>
             </div>
-            <!-- 狀態 3: 載入中畫面 -->
             <div id="loading-view"><div class="loader"></div></div>
-            <!-- 狀態 4: 錯誤畫面 -->
             <div id="error-view">
                 <div class="error-message"></div>
                 <button type="button" id="try-again-btn">再試一次</button>
@@ -132,7 +128,7 @@
         const resultsPanel = document.querySelector('.results-panel');
         const errorMessage = document.querySelector('.error-message');
 
-        const APPS_SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycbywoLwBv6DRhvbL1OfPJbPwMblAZh7IWcUOGEedKc4U77CIZisDKOUBdH4GE9DzTP4B/exec"; // 【重要】請務必替換成您自己的 API 網址
+        const APPS_SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycbysN83dIUnmVr-zzwZYhFiv0jYKlYvurBO3NY2yUMoKLuMew0_WMvwruxVnRdYlzC8g/exec"; // 【重要】請務必替換成您自己的 API 網址
 
         submitBtn.addEventListener('click', handleFareRequest);
         newRideBtn.addEventListener('click', showInputView);
@@ -150,13 +146,15 @@
             
             const originString = `${currentUserLocation.lat},${currentUserLocation.lng}`;
             
-            const apiUrl = new URL(APPS_SCRIPT_API_URL);
-            apiUrl.searchParams.append('origin', originString);
-            apiUrl.searchParams.append('destination', destination);
-            // 【關鍵修改】不再傳送 isNightSurcharge 參數
-            
             try {
-                const response = await fetch(apiUrl);
+                const response = await fetch(APPS_SCRIPT_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({
+                        origin: originString,
+                        destination: destination
+                    })
+                });
                 if (!response.ok) { throw new Error(`伺服器錯誤: ${response.status}`); }
                 const result = await response.json();
                 handleResponse(result);
@@ -210,7 +208,6 @@
             decodedPath.forEach(point => bounds.extend(point));
             map.fitBounds(bounds, { top: 50, bottom: 400, left: 50, right: 50 });
 
-            // 【關鍵修改】動態產生結果 HTML，並檢查是否要顯示夜間加成提示
             let resultsHTML = `
                 <div class="result-item result-fare">預估車資<span>TWD ${data.fare}</span></div>
                 <div class="result-item">預估時間<span>${data.duration}</span></div>
