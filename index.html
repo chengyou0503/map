@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>旅程費用估算</title>
     <style>
-        /* CSS 部分無需變更 */
+        /* UI/UX v11 Final: JSONP & UI Polish */
         :root {
             --primary-color: #000; --primary-hover-color: #333; --border-color: #eee;
             --background-color: #f6f6f6; --text-color: #000; --text-secondary-color: #555;
@@ -128,13 +128,12 @@
         const resultsPanel = document.querySelector('.results-panel');
         const errorMessage = document.querySelector('.error-message');
 
-        const APPS_SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycby6x4c3oLoTYk7EzLxAM9A535JcufdwKe3M9kEIOgp5q_pcA5_m7jU1NQOdwg_g2kUj/exec"; // 【重要】請務必替換成您自己的 API 網址
+        const APPS_SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycbxMbRerSWLODwfe3y5R3NJptEU4OLr_TVtvcmmRy0B92oipd6bleXT_NfHgazJI3MGK/exec"; // 【重要】請務必替換成您自己的 API 網址
 
         submitBtn.addEventListener('click', handleFareRequest);
         newRideBtn.addEventListener('click', showInputView);
         tryAgainBtn.addEventListener('click', showInputView);
         
-        // 【關鍵修改】使用 JSONP 請求函式來繞過 CORS
         function jsonpRequest(url, callback) {
             const callbackName = 'jsonp_callback_' + Math.round(100000 * Math.random());
             window[callbackName] = function(data) {
@@ -146,7 +145,6 @@
             const script = document.createElement('script');
             script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + callbackName;
             script.onerror = () => {
-                // 處理網路錯誤或 Apps Script 部署權限問題
                 delete window[callbackName];
                 document.body.removeChild(script);
                 callback({ success: false, error: '無法連接到後端 API，請檢查部署設定與網址。' });
