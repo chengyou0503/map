@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>旅程費用估算</title>
     <style>
-        /* UI/UX v11 Final: JSONP & UI Polish */
         :root {
             --primary-color: #000; --primary-hover-color: #333; --border-color: #eee;
             --background-color: #f6f6f6; --text-color: #000; --text-secondary-color: #555;
@@ -40,17 +39,16 @@
             border-radius: 10px; padding: 12px; margin-bottom: 20px;
         }
         .input-group svg { flex-shrink: 0; margin-right: 10px; }
-        #destination-input {
+        #initial-destination-input, #start-input, #destination-input {
             width: 100%; font-size: 16px; border: none; background: transparent;
         }
-        #destination-input:focus { outline: none; }
-        #submit-btn, #new-ride-btn, #try-again-btn {
+        #initial-destination-input:focus, #start-input:focus, #destination-input:focus { outline: none; }
+        #next-btn, #submit-btn, #new-ride-btn, #try-again-btn {
             width: 100%; padding: 16px; background-color: var(--primary-color); color: white;
             border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer;
             transition: background-color 0.2s;
         }
-        #submit-btn:hover, #new-ride-btn:hover, #try-again-btn:hover { background-color: var(--primary-hover-color); }
-        #submit-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+        #next-btn:hover, #submit-btn:hover, #new-ride-btn:hover, #try-again-btn:hover { background-color: var(--primary-hover-color); }
         .results-panel { padding-top: 10px; }
         .result-item { font-size: 16px; display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border-color); }
         .result-item:last-child { border-bottom: none; }
@@ -69,13 +67,27 @@
     <div class="app-layout">
         <div id="map" class="map-container"></div>
         <div class="control-panel">
+            <!-- 步驟一：只輸入目的地 -->
             <div id="input-view">
+                <div class="input-group">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 18C14.4183 18 18 14.4183 18 10C18 5.58172 14.4183 2 10 2C5.58172 2 2 5.58172 2 10C2 14.4183 5.58172 18 10 18Z" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 21L15 15" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <input type="text" id="initial-destination-input" placeholder="想去哪裡？">
+                </div>
+                <button type="button" id="next-btn">下一步</button>
+            </div>
+            <!-- 步驟二：確認起點與終點 -->
+            <div id="confirm-view" style="display: none;">
+                <div class="input-group">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 8C9.79086 8 8 9.79086 8 12C8 14.2091 9.79086 16 12 16C14.2091 16 16 14.2091 16 12C16 9.79086 14.2091 8 12 8Z" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 2V4" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 20V22" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 12H2" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 12H20" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <input type="text" id="start-input" placeholder="從哪裡出發？">
+                </div>
                 <div class="input-group">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 18C14.4183 18 18 14.4183 18 10C18 5.58172 14.4183 2 10 2C5.58172 2 2 5.58172 2 10C2 14.4183 5.58172 18 10 18Z" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 21L15 15" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     <input type="text" id="destination-input" placeholder="想去哪裡？">
                 </div>
-                <button type="button" id="submit-btn">確認目的地</button>
+                <button type="button" id="submit-btn">估算費用</button>
             </div>
+            <!-- 結果、載入中、錯誤畫面 -->
             <div id="results-view">
                 <div class="results-panel"></div>
                 <button type="button" id="new-ride-btn" style="margin-top: 20px;">重新查詢</button>
@@ -100,7 +112,7 @@
             map = new Map(document.getElementById('map'), {
                 center: defaultCenter, zoom: 14, disableDefaultUI: true,
                 zoomControl: true, mapTypeControl: false, streetViewControl: false,
-                mapId: "UBER_PRO_MAP_STYLE"
+                mapId: "YOUR_MAP_ID" // (選填) 你可以換成自己的地圖樣式 ID
             });
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
@@ -112,62 +124,67 @@
                     () => console.warn("無法取得使用者位置，將使用預設地點。")
                 );
             }
-            const autocomplete = new Autocomplete(destinationInput, { fields: ["formatted_address", "geometry", "name"] });
+            const autocompleteOptions = { fields: ["formatted_address", "geometry", "name"] };
+            new Autocomplete(initialDestinationInput, autocompleteOptions);
+            new Autocomplete(startInput, autocompleteOptions);
+            new Autocomplete(destinationInput, autocompleteOptions);
         }
     </script>
-    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAwNCK7580qzhz4ySuK1CQ1T66RaYKpBLg&libraries=places,geometry&callback=initMap"></script>
+    <!-- 【重要】請將 YOUR_GOOGLE_MAPS_API_KEY 替換成你自己的 Google Maps API 金鑰 -->
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&libraries=places,geometry&callback=initMap"></script>
     <script>
+        const initialDestinationInput = document.getElementById('initial-destination-input');
+        const nextBtn = document.getElementById('next-btn');
+        const inputView = document.getElementById('input-view');
+        const confirmView = document.getElementById('confirm-view');
+        const startInput = document.getElementById('start-input');
         const destinationInput = document.getElementById('destination-input');
         const submitBtn = document.getElementById('submit-btn');
         const newRideBtn = document.getElementById('new-ride-btn');
         const tryAgainBtn = document.getElementById('try-again-btn');
-        const inputView = document.getElementById('input-view');
         const resultsView = document.getElementById('results-view');
         const loadingView = document.getElementById('loading-view');
         const errorView = document.getElementById('error-view');
         const resultsPanel = document.querySelector('.results-panel');
         const errorMessage = document.querySelector('.error-message');
 
-        const APPS_SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycbxMbRerSWLODwfe3y5R3NJptEU4OLr_TVtvcmmRy0B92oipd6bleXT_NfHgazJI3MGK/exec"; // 【重要】請務必替換成您自己的 API 網址
+        // 【重要】請將 YOUR_APPS_SCRIPT_API_URL 替換成你剛剛部署後取得的網址
+        const APPS_SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycbx2H4Ko_JOkdNpmQlkay4zPv2zbTWa-9gR4oPuChm4XYtOmY5_GoVG00goyjWywpHAa/exec";
 
+        nextBtn.addEventListener('click', showConfirmView);
         submitBtn.addEventListener('click', handleFareRequest);
         newRideBtn.addEventListener('click', showInputView);
         tryAgainBtn.addEventListener('click', showInputView);
         
-        function jsonpRequest(url, callback) {
-            const callbackName = 'jsonp_callback_' + Math.round(100000 * Math.random());
-            window[callbackName] = function(data) {
-                delete window[callbackName];
-                document.body.removeChild(script);
-                callback(data);
-            };
-
-            const script = document.createElement('script');
-            script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + callbackName;
-            script.onerror = () => {
-                delete window[callbackName];
-                document.body.removeChild(script);
-                callback({ success: false, error: '無法連接到後端 API，請檢查部署設定與網址。' });
-            };
-            document.body.appendChild(script);
+        function showConfirmView() {
+            const destination = initialDestinationInput.value.trim();
+            if (!destination) { alert("請先輸入目的地。"); return; }
+            destinationInput.value = destination;
+            startInput.value = currentUserLocation ? "目前位置" : "";
+            inputView.style.display = 'none';
+            confirmView.style.display = 'block';
         }
 
         function handleFareRequest() {
             if (APPS_SCRIPT_API_URL === "YOUR_APPS_SCRIPT_API_URL") {
                 alert("錯誤：請先在 index.html 檔案中設定您的 APPS_SCRIPT_API_URL！"); return;
             }
+            const start = startInput.value.trim();
             const destination = destinationInput.value.trim();
-            if (!destination) { alert("請輸入目的地。"); return; }
-            if (!currentUserLocation) { alert("無法取得您目前的位置。請允許位置存取權限後再試一次。"); return; }
-            
+            if (!start || !destination) { alert("請輸入起點與目的地。"); return; }
+            let originString;
+            if (start === "目前位置") {
+                if (!currentUserLocation) {
+                    alert("無法取得您目前的位置。請允許位置存取權限或手動輸入起點。"); return;
+                }
+                originString = `${currentUserLocation.lat},${currentUserLocation.lng}`;
+            } else {
+                originString = start;
+            }
             showLoadingView();
-            
-            const originString = `${currentUserLocation.lat},${currentUserLocation.lng}`;
-            
             const apiUrl = new URL(APPS_SCRIPT_API_URL);
             apiUrl.searchParams.append('origin', originString);
             apiUrl.searchParams.append('destination', destination);
-            
             jsonpRequest(apiUrl.href, handleResponse);
         }
 
@@ -183,8 +200,9 @@
             if (routePolyline) routePolyline.setMap(null);
             if (startMarker) startMarker.map = null;
             if (endMarker) endMarker.map = null;
-            destinationInput.value = '';
+            initialDestinationInput.value = '';
             if(currentUserLocation) map.panTo(currentUserLocation); map.setZoom(16);
+            confirmView.style.display = 'none';
             resultsView.style.display = 'none';
             loadingView.style.display = 'none';
             errorView.style.display = 'none';
@@ -193,6 +211,7 @@
 
         function showLoadingView() {
             inputView.style.display = 'none';
+            confirmView.style.display = 'none';
             resultsView.style.display = 'none';
             errorView.style.display = 'none';
             loadingView.style.display = 'block';
@@ -202,20 +221,15 @@
             if (routePolyline) routePolyline.setMap(null);
             if (startMarker) startMarker.map = null;
             if (endMarker) endMarker.map = null;
-
             const decodedPath = google.maps.geometry.encoding.decodePath(data.polyline);
             if (decodedPath.length === 0) { showErrorView("無法解析路線資料。"); return; }
-
             routePolyline = new google.maps.Polyline({ path: decodedPath, strokeColor: '#000000', strokeOpacity: 0.8, strokeWeight: 6 });
             routePolyline.setMap(map);
-
             startMarker = new AdvancedMarkerElement({ position: decodedPath[0], map: map });
             endMarker = new AdvancedMarkerElement({ position: decodedPath[decodedPath.length - 1], map: map });
-
             const bounds = new google.maps.LatLngBounds();
             decodedPath.forEach(point => bounds.extend(point));
             map.fitBounds(bounds, { top: 50, bottom: 400, left: 50, right: 50 });
-
             let resultsHTML = `
                 <div class="result-item result-fare">預估車資<span>TWD ${data.fare}</span></div>
                 <div class="result-item">預估時間<span>${data.duration}</span></div>
@@ -225,8 +239,7 @@
                 resultsHTML += `<div class="result-item surcharge-info"><span>夜間加成 (23:00-06:00)</span><span>已包含</span></div>`;
             }
             resultsPanel.innerHTML = resultsHTML;
-            
-            inputView.style.display = 'none';
+            confirmView.style.display = 'none';
             loadingView.style.display = 'none';
             errorView.style.display = 'none';
             resultsView.style.display = 'block';
@@ -234,10 +247,27 @@
 
         function showErrorView(message) {
             errorMessage.textContent = message || "發生未知錯誤。";
-            inputView.style.display = 'none';
+            confirmView.style.display = 'none';
             resultsView.style.display = 'none';
             loadingView.style.display = 'none';
             errorView.style.display = 'block';
+        }
+        
+        function jsonpRequest(url, callback) {
+            const callbackName = 'jsonp_callback_' + Math.round(100000 * Math.random());
+            window[callbackName] = function(data) {
+                delete window[callbackName];
+                document.body.removeChild(script);
+                callback(data);
+            };
+            const script = document.createElement('script');
+            script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + callbackName;
+            script.onerror = () => {
+                delete window[callbackName];
+                document.body.removeChild(script);
+                callback({ success: false, error: '無法連接到後端 API，請檢查部署設定與網址。' });
+            };
+            document.body.appendChild(script);
         }
     </script>
 </body>
