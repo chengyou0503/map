@@ -130,8 +130,8 @@
             new Autocomplete(destinationInput, autocompleteOptions);
         }
     </script>
-    <!-- 【重要】請將 YOUR_GOOGLE_MAPS_API_KEY 替換成你自己的 Google Maps API 金鑰 -->
-    <script async defer src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&libraries=places,geometry&callback=initMap"></script>
+    <!-- 【修改完成】我已經將你的 API 金鑰放入這裡 -->
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAwNCK7580qzhz4ySuK1CQ1T66RaYKpBLg&libraries=places,geometry&callback=initMap"></script>
     <script>
         const initialDestinationInput = document.getElementById('initial-destination-input');
         const nextBtn = document.getElementById('next-btn');
@@ -148,7 +148,7 @@
         const resultsPanel = document.querySelector('.results-panel');
         const errorMessage = document.querySelector('.error-message');
 
-        // 【重要】請將 YOUR_APPS_SCRIPT_API_URL 替換成你剛剛部署後取得的網址
+        // 【重要】請務必將 YOUR_APPS_SCRIPT_API_URL 替換成你部署後取得的網址
         const APPS_SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycbwHHN0DEaPRgICBJEmo3EYn-xA6yK85QM83pPPdayLNZJmoK6fBBnzENOGe50senhVi/exec";
 
         nextBtn.addEventListener('click', showConfirmView);
